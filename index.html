@@ -453,8 +453,22 @@
     nextObstacle--;
     if (nextObstacle <= 0) {
       spawnObstacle();
-      const minGap = Math.max(50, 90 - t / 60);
-      const maxGap = Math.max(95, 160 - t / 40);
+      let minGap, maxGap;
+      if (t < 3600) {
+        // Phase 1 (0–60s): normal ramp
+        minGap = Math.max(50, 90 - t / 60);
+        maxGap = Math.max(95, 160 - t / 40);
+      } else if (t < 7200) {
+        // Phase 2 (60–120s): tighten progressively toward impossible
+        // At t=3600: 50–95 frames. At t=7200: 8–15 frames (unjumpable).
+        const p = (t - 3600) / 3600; // 0 → 1
+        minGap = 50 - p * 42;        // 50 → 8
+        maxGap = 95 - p * 80;        // 95 → 15
+      } else {
+        // Phase 3 (120s+): physically impossible — safety net
+        minGap = 8;
+        maxGap = 15;
+      }
       nextObstacle = minGap + Math.random() * (maxGap - minGap);
     }
 
