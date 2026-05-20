@@ -111,7 +111,7 @@
   let state = 'start'; // 'start' | 'play' | 'gameover'
   let score = 0, coinCount = 0;
   let best = parseInt(localStorage.getItem('turtleBest') || '0', 10);
-  let speed = 6, t = 0;
+  let speed = 3, t = 0;
   let scrollGround = 0, scrollCloud = 0, scrollOcean = 0;
   let obstacles = [], coins = [], particles = [];
   let nextObstacle = 80, nextCoin = 60;
@@ -120,7 +120,7 @@
   const player = { x: 60, y: GROUND, vy: 0, onGround: true };
 
   function reset() {
-    score = 0; coinCount = 0; speed = 6; t = 0;
+    score = 0; coinCount = 0; speed = 3; t = 0;
     player.y = GROUND; player.vy = 0; player.onGround = true;
     obstacles = []; coins = []; particles = [];
     nextObstacle = 80; nextCoin = 60;
@@ -432,8 +432,8 @@
     if (shake > 0) shake = Math.max(0, shake - 0.5);
     if (state !== 'play') return;
 
-    // Difficulty: speed 6 → 14 over 45s (2700 frames @ 60fps)
-    speed = 6 + Math.min(t / 2700, 1) * 8;
+    // Difficulty: speed 3 → 14 over 45s (2700 frames @ 60fps)
+    speed = 3 + Math.min(t / 2700, 1) * 11;
 
     // Player physics
     player.vy += GRAV;
