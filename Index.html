@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🐢 Turtle Runner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: #0e1320;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(91, 140, 90, 0.08), transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(255, 217, 61, 0.06), transparent 50%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Press Start 2P', monospace;
+    color: #f0e9d2;
+    overflow: hidden;
+    padding: 20px;
+  }
+  .wrap { text-align: center; }
+  h1 {
+    margin-bottom: 22px;
+    font-size: 22px;
+    letter-spacing: 4px;
+    color: #ffd93d;
+    text-shadow: 3px 3px 0 #c84a3a, 6px 6px 0 rgba(0,0,0,0.3);
+  }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    border: 6px solid #f0e9d2;
+    border-radius: 2px;
+    background: #87CEEB;
+    width: 800px;
+    height: 400px;
+    display: block;
+    margin: 0 auto;
+    box-shadow:
+      0 0 0 2px #0e1320,
+      0 0 0 4px #5b8c5a,
+      0 12px 40px rgba(0, 0, 0, 0.5);
+  }
+  .hint {
+    margin-top: 18px;
+    font-size: 10px;
+    color: #8c9bb4;
+    letter-spacing: 2px;
+  }
+  .hint kbd {
+    display: inline-block;
+    padding: 4px 8px;
+    background: #1d2438;
+    border: 2px solid #3a4566;
+    border-bottom-width: 4px;
+    border-radius: 3px;
+    color: #ffd93d;
+    font-family: inherit;
+    font-size: 9px;
+    margin: 0 4px;
+  }
+  @media (max-width: 860px) {
+    canvas { width: 95vw; height: calc(95vw * 0.5); }
+    h1 { font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🐢 TURTLE RUNNER</h1>
+  <canvas id="game" width="400" height="200"></canvas>
+  <div class="hint"><kbd>SPACE</kbd> or <kbd>TAP</kbd> to jump</div>
+</div>
+
+<script>
+(() => {
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  // === Sprite ===
+  // 5 frames × 24×22: run_0, run_1, run_2, run_3, jump
+  const turtleSheet = new Image();
+  turtleSheet.src = 'turtle_sheet.png';
+
+  // === Config ===
+  const W = 400, H = 200, GROUND = 165;
+  const GRAV = 0.5, JUMP = -7.8;
+
+  const COLOR = {
+    sky1: '#87CEEB', sky2: '#B5DDED',
+    sun: '#FFFAE0', sunRing: '#FFE08A',
+    cloud: '#FFFFFF',
+    ocean: '#3B7CB5', oceanLight: '#6DAFD8',
+    sand: '#F0DCA5', sandDark: '#D4BA7E', sandShade: '#8C7A4A',
+    shell: '#5B8C5A', shellDark: '#2D4F2D', shellMark: '#7DB37D',
+    skin: '#9CD49C', skinDark: '#5FA85F',
+    eye: '#1A1A1A', cheek: '#FF9B9B',
+    coral: '#FF8B7F', coralDark: '#D85651', coralLight: '#FFBFB3',
+    conch: '#FFE0CC', conchDark: '#C89878', conchStripe: '#A87858',
+    coin: '#FFD93D', coinDark: '#D9A50F', coinShine: '#FFF8B8'
+  };
+
+  // === State ===
+  let state = 'start'; // 'start' | 'play' | 'gameover'
+  let score = 0, coinCount = 0;
+  let best = parseInt(localStorage.getItem('turtleBest') || '0', 10);
+  let speed = 2.4, t = 0;
+  let scrollGround = 0, scrollCloud = 0, scrollOcean = 0;
+  let obstacles = [], coins = [], particles = [];
+  let nextObstacle = 80, nextCoin = 60;
+  let shake = 0;
+
+  const player = { x: 60, y: GROUND, vy: 0, onGround: true };
+
+  function reset() {
+    score = 0; coinCount = 0; speed = 2.4; t = 0;
+    player.y = GROUND; player.vy = 0; player.onGround = true;
+    obstacles = []; coins = []; particles = [];
+    nextObstacle = 80; nextCoin = 60;
+    shake = 0;
+    state = 'play';
+  }
+
+  // === Drawing ===
+
+  function drawSky() {
+    const g = ctx.createLinearGradient(0, 0, 0, GROUND);
+    g.addColorStop(0, COLOR.sky1);
+    g.addColorStop(1, COLOR.sky2);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, GROUND);
+
+    // Sun (chunky pixel circle)
+    const sx = W - 56, sy = 28;
+    ctx.fillStyle = COLOR.sunRing;
+    ctx.fillRect(sx - 2, sy + 4, 26, 14);
+    ctx.fillRect(sx, sy + 2, 22, 18);
+    ctx.fillRect(sx + 2, sy, 18, 22);
+    ctx.fillRect(sx + 4, sy - 2, 14, 26);
+    ctx.fillStyle = COLOR.sun;
+    ctx.fillRect(sx, sy + 4, 22, 14);
+    ctx.fillRect(sx + 2, sy + 2, 18, 18);
+    ctx.fillRect(sx + 4, sy, 14, 22);
+
+    // Clouds (parallax slow)
+    for (let i = 0; i < 4; i++) {
+      const base = i * 130 - (scrollCloud * 0.3);
+      let cx = base % (W + 80);
+      if (cx < -40) cx += (W + 80);
+      drawCloud(cx, 22 + (i % 2) * 18);
+    }
+
+    // Distant ocean strip
+    ctx.fillStyle = COLOR.ocean;
+    ctx.fillRect(0, GROUND - 22, W, 16);
+    ctx.fillStyle = COLOR.oceanLight;
+    const wo = Math.floor(scrollOcean * 0.4) % 20;
+    for (let i = -1; i < W / 20 + 1; i++) {
+      const wx = i * 20 - wo;
+      ctx.fillRect(wx, GROUND - 18, 7, 1);
+      ctx.fillRect(wx + 10, GROUND - 14, 6, 1);
+    }
+    // Ocean horizon line
+    ctx.fillStyle = '#2D5F90';
+    ctx.fillRect(0, GROUND - 22, W, 1);
+  }
+
+  function drawCloud(x, y) {
+    ctx.fillStyle = COLOR.cloud;
+    ctx.fillRect(x + 2, y + 4, 22, 5);
+    ctx.fillRect(x + 5, y + 1, 16, 8);
+    ctx.fillRect(x + 8, y - 1, 10, 4);
+    ctx.fillRect(x, y + 5, 4, 3);
+  }
+
+  function drawGround() {
+    // Sand body
+    ctx.fillStyle = COLOR.sand;
+    ctx.fillRect(0, GROUND - 6, W, H - GROUND + 6);
+    // Top edge (slightly darker)
+    ctx.fillStyle = COLOR.sandDark;
+    ctx.fillRect(0, GROUND - 6, W, 2);
+
+    // Pebble decoration (scrolling)
+    ctx.fillStyle = COLOR.sandShade;
+    const sw = Math.floor(scrollGround) % 32;
+    for (let i = -1; i < W / 32 + 2; i++) {
+      const sx = i * 32 - sw;
+      ctx.fillRect(sx + 4, GROUND + 4, 1, 1);
+      ctx.fillRect(sx + 14, GROUND + 12, 2, 1);
+      ctx.fillRect(sx + 8, GROUND + 22, 1, 1);
+      ctx.fillRect(sx + 22, GROUND + 8, 1, 1);
+      ctx.fillRect(sx + 18, GROUND + 28, 2, 1);
+      ctx.fillRect(sx + 28, GROUND + 18, 1, 1);
+    }
+  }
+
+  function drawTurtle() {
+    const x = Math.floor(player.x);
+    const y = Math.floor(player.y);
+
+    // Sprite not loaded yet — skip (loads in <100ms on first paint)
+    if (!turtleSheet.complete || turtleSheet.naturalWidth === 0) return;
+
+    let frameIdx;
+    if (player.onGround) {
+      // 4-frame run cycle, change every 5 ticks
+      frameIdx = Math.floor(t / 5) % 4;
+    } else {
+      // Jump frame (index 4 = 5th frame in the sheet)
+      frameIdx = 4;
+      // Jump shadow on ground — scales with height (sprite has no shadow on jump frame)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      const dist = (GROUND - y) / 60;
+      const w = Math.max(4, 14 - dist * 8);
+      ctx.fillRect(x + (24 - w) / 2, GROUND - 1, w, 2);
+    }
+
+    // Draw sprite: sprite is 24×22, bottom row 21 contains shadow line.
+    // Position so the character feet sit at player.y (ground line).
+    ctx.drawImage(
+      turtleSheet,
+      frameIdx * 24, 0, 24, 22,   // source rect
+      x, y - 21, 24, 22            // destination rect
+    );
+  }
+
+  function drawCoral(o) {
+    const x = Math.floor(o.x), y = GROUND - o.h;
+    // Base mound
+    ctx.fillStyle = COLOR.coralDark;
+    ctx.fillRect(x + 1, y + o.h - 5, 14, 5);
+    // Branches
+    ctx.fillStyle = COLOR.coral;
+    ctx.fillRect(x + 4, y + 2, 3, o.h - 7);
+    ctx.fillRect(x + 9, y, 3, o.h - 5);
+    ctx.fillRect(x, y + 6, 3, o.h - 11);
+    ctx.fillRect(x + 13, y + 4, 3, o.h - 9);
+    // Tips
+    ctx.fillStyle = COLOR.coralLight;
+    ctx.fillRect(x + 4, y + 2, 3, 2);
+    ctx.fillRect(x + 9, y, 3, 2);
+    ctx.fillRect(x + 13, y + 4, 3, 2);
+    ctx.fillRect(x, y + 6, 3, 2);
+  }
+
+  function drawShell(o) {
+    const x = Math.floor(o.x), y = GROUND - o.h;
+    // Base
+    ctx.fillStyle = COLOR.conchDark;
+    ctx.fillRect(x + 1, y + o.h - 4, 14, 4);
+    // Body
+    ctx.fillStyle = COLOR.conch;
+    ctx.fillRect(x + 2, y + 4, 12, o.h - 6);
+    ctx.fillRect(x + 4, y + 1, 8, 5);
+    ctx.fillRect(x + 6, y - 1, 4, 4);
+    // Stripes
+    ctx.fillStyle = COLOR.conchStripe;
+    ctx.fillRect(x + 5, y + 2, 1, o.h - 5);
+    ctx.fillRect(x + 9, y, 1, o.h - 3);
+    // Opening dot
+    ctx.fillStyle = COLOR.conchDark;
+    ctx.fillRect(x + 12, y + o.h - 7, 2, 3);
+  }
+
+  function drawCoin(c) {
+    const x = Math.floor(c.x), y = Math.floor(c.y);
+    const f = Math.floor((t + c.phase) / 6) % 4;
+    if (f === 0) {
+      ctx.fillStyle = COLOR.coinDark;
+      ctx.fillRect(x, y + 1, 8, 6);
+      ctx.fillRect(x + 1, y, 6, 8);
+      ctx.fillStyle = COLOR.coin;
+      ctx.fillRect(x + 1, y + 2, 6, 4);
+      ctx.fillRect(x + 2, y + 1, 4, 6);
+      ctx.fillStyle = COLOR.coinShine;
+      ctx.fillRect(x + 2, y + 2, 1, 2);
+    } else if (f === 1) {
+      ctx.fillStyle = COLOR.coinDark;
+      ctx.fillRect(x + 2, y, 4, 8);
+      ctx.fillStyle = COLOR.coin;
+      ctx.fillRect(x + 3, y + 1, 2, 6);
+    } else if (f === 2) {
+      ctx.fillStyle = COLOR.coinDark;
+      ctx.fillRect(x + 3, y, 2, 8);
+    } else {
+      ctx.fillStyle = COLOR.coinDark;
+      ctx.fillRect(x + 2, y, 4, 8);
+      ctx.fillStyle = COLOR.coin;
+      ctx.fillRect(x + 3, y + 1, 2, 6);
+    }
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      ctx.fillStyle = p.color;
+      ctx.fillRect(Math.floor(p.x), Math.floor(p.y), p.size, p.size);
+    }
+  }
+
+  function drawUI() {
+    ctx.textAlign = 'left';
+    ctx.font = '8px "Press Start 2P", monospace';
+
+    // Score
+    ctx.fillStyle = '#000';
+    ctx.fillText(`SCORE ${Math.floor(score)}`, 9, 16);
+    ctx.fillStyle = '#FFF';
+    ctx.fillText(`SCORE ${Math.floor(score)}`, 8, 15);
+
+    // Best
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#000';
+    ctx.fillText(`BEST ${best}`, W - 7, 16);
+    ctx.fillStyle = '#FFD93D';
+    ctx.fillText(`BEST ${best}`, W - 8, 15);
+
+    // Coin icon + count
+    ctx.fillStyle = COLOR.coinDark;
+    ctx.fillRect(9, 23, 7, 7);
+    ctx.fillStyle = COLOR.coin;
+    ctx.fillRect(10, 24, 5, 5);
+    ctx.fillStyle = COLOR.coinShine;
+    ctx.fillRect(11, 25, 1, 1);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#000';
+    ctx.fillText(`x${coinCount}`, 21, 30);
+    ctx.fillStyle = '#FFF';
+    ctx.fillText(`x${coinCount}`, 20, 29);
+  }
+
+  function drawOverlay() {
+    ctx.fillStyle = 'rgba(8, 18, 38, 0.55)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+
+    if (state === 'start') {
+      ctx.font = '14px "Press Start 2P", monospace';
+      ctx.fillStyle = '#000';
+      ctx.fillText('TURTLE RUNNER', W / 2 + 1, H / 2 - 9);
+      ctx.fillStyle = COLOR.coin;
+      ctx.fillText('TURTLE RUNNER', W / 2, H / 2 - 10);
+
+      ctx.font = '7px "Press Start 2P", monospace';
+      ctx.fillStyle = '#FFF';
+      const blink = Math.floor(t / 30) % 2 === 0;
+      if (blink || t === 0) ctx.fillText('PRESS SPACE TO START', W / 2, H / 2 + 14);
+
+      if (best > 0) {
+        ctx.fillStyle = '#8C9BB4';
+        ctx.fillText(`BEST ${best}`, W / 2, H / 2 + 32);
+      }
+    } else if (state === 'gameover') {
+      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.fillStyle = '#000';
+      ctx.fillText('GAME OVER', W / 2 + 2, H / 2 - 18);
+      ctx.fillStyle = '#FF7A6B';
+      ctx.fillText('GAME OVER', W / 2, H / 2 - 20);
+
+      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.fillStyle = '#FFF';
+      ctx.fillText(`SCORE ${Math.floor(score)}`, W / 2, H / 2 + 4);
+      ctx.fillStyle = COLOR.coin;
+      ctx.fillText(`BEST ${best}`, W / 2, H / 2 + 20);
+
+      ctx.font = '6px "Press Start 2P", monospace';
+      ctx.fillStyle = '#8C9BB4';
+      const blink = Math.floor(t / 25) % 2 === 0;
+      if (blink) {
+        ctx.fillText('SPACE: RESTART', W / 2, H / 2 + 38);
+        ctx.fillText('ENTER: MENU', W / 2, H / 2 + 50);
+      }
+    }
+  }
+
+  // === Update ===
+
+  function spawnObstacle() {
+    const isCoral = Math.random() < 0.55;
+    obstacles.push({
+      x: W + 10,
+      type: isCoral ? 'coral' : 'shell',
+      w: 16,
+      h: isCoral ? 24 : 14
+    });
+  }
+
+  function spawnCoin() {
+    // Random arc of 1-3 coins
+    const count = 1 + Math.floor(Math.random() * 3);
+    const high = Math.random() < 0.55;
+    const baseY = high ? GROUND - 48 : GROUND - 18;
+    for (let i = 0; i < count; i++) {
+      coins.push({
+        x: W + 10 + i * 14,
+        y: baseY + (high ? Math.sin(i * 0.8) * 4 : 0),
+        collected: false,
+        phase: Math.floor(Math.random() * 24)
+      });
+    }
+  }
+
+  function burst(x, y, color, count = 8) {
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 4,
+        vy: -Math.random() * 2.5 - 0.3,
+        life: 22 + Math.floor(Math.random() * 8),
+        color,
+        size: 1 + Math.floor(Math.random() * 2)
+      });
+    }
+  }
+
+  function overlap(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x &&
+           a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  function update() {
+    t++;
+    // Always decay shake — even during gameover/start (otherwise screen shakes forever)
+    if (shake > 0) shake = Math.max(0, shake - 0.5);
+    if (state !== 'play') return;
+
+    // Difficulty: speed 2.2 → 3.8 over 60s (3600 frames @ 60fps)
+    speed = 2.4 + Math.min(t / 3600, 1) * 1.6;
+
+    // Player physics
+    player.vy += GRAV;
+    player.y += player.vy;
+    if (player.y >= GROUND) {
+      player.y = GROUND;
+      player.vy = 0;
+      player.onGround = true;
+    }
+
+    // Scroll layers (parallax)
+    scrollGround += speed;
+    scrollCloud += speed;
+    scrollOcean += speed;
+
+    // Spawn obstacles
+    nextObstacle--;
+    if (nextObstacle <= 0) {
+      spawnObstacle();
+      const minGap = Math.max(75, 130 - t / 60);
+      const maxGap = Math.max(130, 220 - t / 40);
+      nextObstacle = minGap + Math.random() * (maxGap - minGap);
+    }
+
+    // Spawn coins
+    nextCoin--;
+    if (nextCoin <= 0) {
+      spawnCoin();
+      nextCoin = 60 + Math.random() * 80;
+    }
+
+    // Move entities
+    for (const o of obstacles) o.x -= speed;
+    for (const c of coins) c.x -= speed;
+
+    // Particles
+    for (const p of particles) {
+      p.x += p.vx; p.y += p.vy;
+      p.vy += 0.18;
+      p.life--;
+    }
+    particles = particles.filter(p => p.life > 0);
+
+    // Cleanup
+    obstacles = obstacles.filter(o => o.x + o.w > -5);
+    coins = coins.filter(c => c.x > -10 && !c.collected);
+
+    // Score (distance)
+    score += 0.5;
+
+    // Player hitbox (slightly tighter than visible for forgiving feel)
+    const pBox = { x: player.x + 3, y: player.y - 16, w: 18, h: 15 };
+
+    // Collisions
+    for (const o of obstacles) {
+      const oBox = { x: o.x + 1, y: GROUND - o.h + 2, w: o.w - 2, h: o.h - 2 };
+      if (overlap(pBox, oBox)) {
+        state = 'gameover';
+        const final = Math.floor(score);
+        if (final > best) {
+          best = final;
+          localStorage.setItem('turtleBest', String(best));
+        }
+        burst(player.x + 12, player.y - 8, COLOR.shell, 14);
+        burst(player.x + 12, player.y - 8, COLOR.coral, 6);
+        shake = 8;
+        return;
+      }
+    }
+
+    // Coin collection
+    for (const c of coins) {
+      if (c.collected) continue;
+      const cBox = { x: c.x, y: c.y, w: 8, h: 8 };
+      if (overlap(pBox, cBox)) {
+        c.collected = true;
+        coinCount++;
+        score += 10;
+        burst(c.x + 4, c.y + 4, COLOR.coin, 5);
+      }
+    }
+  }
+
+  function draw() {
+    ctx.save();
+    if (shake > 0) {
+      ctx.translate(
+        (Math.random() - 0.5) * shake,
+        (Math.random() - 0.5) * shake
+      );
+    }
+
+    drawSky();
+    drawGround();
+
+    for (const c of coins) if (!c.collected) drawCoin(c);
+    for (const o of obstacles) {
+      if (o.type === 'coral') drawCoral(o);
+      else drawShell(o);
+    }
+    drawTurtle();
+    drawParticles();
+    drawUI();
+
+    ctx.restore();
+
+    if (state !== 'play') drawOverlay();
+  }
+
+  // Grace period so the death-press doesn't immediately restart
+  let goFrames = 0;
+
+  function jump() {
+    if (state === 'play') {
+      if (player.onGround) {
+        player.vy = JUMP;
+        player.onGround = false;
+      }
+    } else if (state === 'gameover') {
+      if (goFrames < 20) return;
+      reset();
+    } else {
+      reset();
+    }
+  }
+
+  function loop() {
+    if (state === 'gameover') goFrames++;
+    else goFrames = 0;
+    update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function returnToMenu() {
+    state = 'start';
+    obstacles = [];
+    coins = [];
+    particles = [];
+    shake = 0;
+    score = 0;
+    coinCount = 0;
+  }
+
+  document.addEventListener('keydown', e => {
+    if ((e.code === 'Space' || e.code === 'ArrowUp') && !e.repeat) {
+      e.preventDefault();
+      jump();
+    } else if (e.code === 'Enter' && !e.repeat && state === 'gameover') {
+      e.preventDefault();
+      returnToMenu();
+    }
+  });
+  cv.addEventListener('mousedown', e => { e.preventDefault(); jump(); });
+  cv.addEventListener('touchstart', e => { e.preventDefault(); jump(); }, { passive: false });
+
+  loop();
+})();
+</script>
+</body>
+</html>
