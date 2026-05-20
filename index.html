@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🐢 Turtle Runner</title>
+<link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -90,7 +91,7 @@
 
   // === Config ===
   const W = 400, H = 200, GROUND = 165;
-  const GRAV = 0.5, JUMP = -7.8;
+  const GRAV = 0.5, JUMP = -7.6;
 
   const COLOR = {
     sky1: '#87CEEB', sky2: '#B5DDED',
@@ -110,7 +111,7 @@
   let state = 'start'; // 'start' | 'play' | 'gameover'
   let score = 0, coinCount = 0;
   let best = parseInt(localStorage.getItem('turtleBest') || '0', 10);
-  let speed = 2.4, t = 0;
+  let speed = 2.2, t = 0;
   let scrollGround = 0, scrollCloud = 0, scrollOcean = 0;
   let obstacles = [], coins = [], particles = [];
   let nextObstacle = 80, nextCoin = 60;
@@ -119,7 +120,7 @@
   const player = { x: 60, y: GROUND, vy: 0, onGround: true };
 
   function reset() {
-    score = 0; coinCount = 0; speed = 2.4; t = 0;
+    score = 0; coinCount = 0; speed = 2.2; t = 0;
     player.y = GROUND; player.vy = 0; player.onGround = true;
     obstacles = []; coins = []; particles = [];
     nextObstacle = 80; nextCoin = 60;
@@ -432,7 +433,7 @@
     if (state !== 'play') return;
 
     // Difficulty: speed 2.2 → 3.8 over 60s (3600 frames @ 60fps)
-    speed = 2.4 + Math.min(t / 3600, 1) * 1.6;
+    speed = 2.2 + Math.min(t / 3600, 1) * 1.6;
 
     // Player physics
     player.vy += GRAV;
